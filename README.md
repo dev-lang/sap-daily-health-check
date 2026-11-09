@@ -1,13 +1,18 @@
 # sap-daily-health-check
 
-Report ABAP **`ZDAILY_HEALTH_CHECK`** que automatiza el control diario de Basis de un sistema SAP
-y muestra el resultado en un ALV tipo tablero (semáforo, transacción, chequeo, estado, resultado y detalle).
+Reports ABAP para el control diario de Basis de un sistema SAP, con salida en un ALV tipo tablero
+(semáforo, transacción, chequeo, estado, resultado y detalle) y envío opcional por mail:
+
+| Programa | Qué controla |
+|---|---|
+| [`ZDAILY_HEALTH_CHECK`](src/ZDAILY_HEALTH_CHECK.abap) | Health check general: SICK, ST22, SM12, SM13, SM50, RTCCTOOL, STRUST, ST03N, SMLG, SCOT, SLICENSE |
+| [`ZDAILY_JOB_CHECK`](src/ZDAILY_JOB_CHECK.abap) | Jobs de fondo (SM37), un chequeo por status |
 
 Probado en SAP ECC 6.0 EHP6 (SAP_BASIS 731, kernel 722, Sybase ASE). Las llamadas a FMs y tablas
 que pueden cambiar entre releases se hacen en forma dinámica: si algo no existe o tiene otra interfaz,
 el chequeo queda **INCOMPLETO** con el motivo, en lugar de dar dump.
 
-## Chequeos
+## ZDAILY_HEALTH_CHECK – chequeos
 
 | Transacción | Chequeo | Criterio |
 |---|---|---|
@@ -66,3 +71,30 @@ Para jobs de fondo, en la variante conviene poner `P_DMPDT` (dumps desde) como
 variable de selección **D** → *Fecha actual +/- ??? días* = `-1`.
 
 En fondo, el ALV sale al spool del job y el estado general queda en el log del job.
+
+## ZDAILY_JOB_CHECK – jobs de fondo (SM37)
+
+Misma estructura que el health check (pestañas *Chequeos* / *Parametros* / *Envio por mail*,
+ALV tipo tablero y mail en HTML). Un chequeo por cada status de SM37; por defecto se ejecutan
+**Activa** y **Cancelado**.
+
+| Status SM37 | `TBTCO-STATUS` | Período | Criterio |
+|---|---|---|---|
+| Progr. | P | estado actual | Informativo (programados sin liberar) |
+| Liberado | S | estado actual | **Advertencia** si su inicio previsto pasó hace más de N min y no arrancó |
+| Listo | Y | estado actual | **Advertencia** si espera un WP de fondo hace más de N min (por defecto 10) |
+| Activa | R | estado actual | **Advertencia** si corre hace más de N min (por defecto 60) |
+| Finaliz. | F | desde fecha/hora | Informativo, con la duración de cada job |
+| Cancelado | A | desde fecha/hora | **Error**, con el último mensaje de error del log del job (sin la línea genérica *Job cancelled*) |
+
+- Fecha/hora *desde* para finalizados y cancelados: por defecto, últimas 24 h (F4 con calendario).
+- Filtros: nombre de job (admite patrones como `Z*`) y opción para excluir los jobs estándar `SAP_*`.
+- Máximo 200 jobs por status; el resumen indica si hay más.
+- Si corre como job de fondo, no se lista a sí mismo.
+
+## Limitaciones conocidas
+
+- El ALV grid muestra como máximo **128 caracteres por celda**: los detalles más largos se ven
+  cortados en pantalla, pero el contenido está completo y el **mail lo muestra entero**.
+- Jobs en *Listo* que quedaron así tras una caída del sistema (huérfanos) aparecen uno por uno.
+  Se limpian desde SM37 (*Job → Verificar status*) o SM65.
