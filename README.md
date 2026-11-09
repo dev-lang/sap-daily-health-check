@@ -22,6 +22,7 @@ el chequeo queda **INCOMPLETO** con el motivo, en lugar de dar dump.
 | SMLG | Tiempo por instancia | Valor en vivo del message server (igual que SMLG) contra un límite (por defecto 3000 ms) |
 | SCOT | SAPconnect | Nodos activos o, si no hay nodos, cola vacía; job RSCONN01 liberado |
 | SLICENSE | Licencia SAP | Vencimiento de la licencia activa (misma lógica que SLICENSE) |
+| SOST | Envío por mail | Resultado del envío del reporte (opcional) |
 
 ## Instalación
 
@@ -38,11 +39,28 @@ La pantalla de selección tiene pestañas:
 
 - **Chequeos**: qué controles ejecutar (botones *Marcar todos* / *Desmarcar todos*).
 - **Parámetros**: umbrales de cada control (horas de bloqueo, minutos de HOLD, días de aviso, etc.).
+- **Envio por mail**: envía el reporte al terminar (ver abajo).
+
+### Envío por mail
+
+Con la tilde *Enviar el reporte por mail* el programa manda el resultado con `CL_BCS`.
+El cuerpo del mail es la misma tabla del ALV en HTML (estado general arriba, celda de estado
+coloreada), así que se lee directo en el cliente de correo, sin adjuntos.
+
+- **Para / CC**: una o varias direcciones.
+- **Remitente**: opcional (si se deja vacío, el del usuario en SU01). Con proveedores SMTP
+  como Brevo tiene que ser un remitente verificado.
+- **Asunto**: opcional; si se deja vacío se arma solo. En ambos casos se agrega el estado general.
+- **Cuándo enviar**: siempre, solo si hay errores/advertencias/incompletos, o solo si hay errores.
+- **Envío inmediato**: si no se marca, el mail queda en cola hasta el próximo job de SCOT.
+
+Requiere SAPconnect configurado (SCOT, nodo SMTP). El resultado del envío aparece como
+última fila del reporte (*SOST – Envío del reporte por mail*); el estado real de salida se ve en SOST.
 
 ### Variantes y jobs
 
-Una variante guarda todas las pestañas, pero **SAP solo incluye las pestañas que se abrieron
-antes de grabarla**: hacer clic en cada pestaña y recién después *Grabar como variante*.
+Una variante guarda todas las pestañas (Chequeos, Parámetros y Envio por mail), pero
+**SAP solo incluye las pestañas que se abrieron antes de grabarla**: hacer clic en cada pestaña y recién después *Grabar como variante*.
 
 Para jobs de fondo, en la variante conviene poner `P_DMPDT` (dumps desde) como
 variable de selección **D** → *Fecha actual +/- ??? días* = `-1`.

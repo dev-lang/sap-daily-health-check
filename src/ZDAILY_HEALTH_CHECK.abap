@@ -26,6 +26,7 @@ TYPE-POOLS: slis, abap, icon.
 *  en la 48 para no superponerse (sino da GEN_SELECTION_SCREEN_ERROR).
 *----------------------------------------------------------------------*
 TABLES sscrfields.
+DATA gv_email TYPE ad_smtpadr.            "referencia para S_MTO / S_MCC
 
 *--- Pestana 1: chequeos a ejecutar -----------------------------------*
 SELECTION-SCREEN BEGIN OF SCREEN 101 AS SUBSCREEN.
@@ -175,10 +176,63 @@ SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN END OF BLOCK b_lic.
 SELECTION-SCREEN END OF SCREEN 102.
 
+*--- Pestana 3: envio por mail ----------------------------------------*
+SELECTION-SCREEN BEGIN OF SCREEN 103 AS SUBSCREEN.
+SELECTION-SCREEN BEGIN OF BLOCK b_mail WITH FRAME TITLE t_mail.
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS p_mail AS CHECKBOX DEFAULT ' '.
+SELECTION-SCREEN COMMENT 4(50) c_mail FOR FIELD p_mail.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN SKIP 1.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 1(31) c_mto FOR FIELD s_mto.
+SELECTION-SCREEN POSITION 33.
+SELECT-OPTIONS s_mto FOR gv_email NO INTERVALS VISIBLE LENGTH 30.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 1(31) c_mcc FOR FIELD s_mcc.
+SELECTION-SCREEN POSITION 33.
+SELECT-OPTIONS s_mcc FOR gv_email NO INTERVALS VISIBLE LENGTH 30.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 1(31) c_mfrom FOR FIELD p_mfrom.
+SELECTION-SCREEN POSITION 33.
+PARAMETERS p_mfrom TYPE ad_smtpadr VISIBLE LENGTH 30.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 1(31) c_msubj FOR FIELD p_msubj.
+SELECTION-SCREEN POSITION 33.
+PARAMETERS p_msubj TYPE so_obj_des VISIBLE LENGTH 38.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN COMMENT /1(70) c_mnote.
+SELECTION-SCREEN END OF BLOCK b_mail.
+
+SELECTION-SCREEN BEGIN OF BLOCK b_when WITH FRAME TITLE t_when.
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS r_mall RADIOBUTTON GROUP snd DEFAULT 'X'.
+SELECTION-SCREEN COMMENT 4(55) c_mall FOR FIELD r_mall.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS r_mwarn RADIOBUTTON GROUP snd.
+SELECTION-SCREEN COMMENT 4(55) c_mwarn FOR FIELD r_mwarn.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS r_merr RADIOBUTTON GROUP snd.
+SELECTION-SCREEN COMMENT 4(55) c_merr FOR FIELD r_merr.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN SKIP 1.
+SELECTION-SCREEN BEGIN OF LINE.
+PARAMETERS p_mimm AS CHECKBOX DEFAULT 'X'.
+SELECTION-SCREEN COMMENT 4(55) c_mimm FOR FIELD p_mimm.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN END OF BLOCK b_when.
+SELECTION-SCREEN END OF SCREEN 103.
+
 *--- Pantalla 1000: las dos pestanas -----------------------------------*
 SELECTION-SCREEN BEGIN OF TABBED BLOCK tabs FOR 26 LINES.
 SELECTION-SCREEN TAB (20) tab1 USER-COMMAND tab1 DEFAULT SCREEN 101.
 SELECTION-SCREEN TAB (20) tab2 USER-COMMAND tab2 DEFAULT SCREEN 102.
+SELECTION-SCREEN TAB (20) tab3 USER-COMMAND tab3 DEFAULT SCREEN 103.
 SELECTION-SCREEN END OF BLOCK tabs.
 
 
@@ -237,6 +291,7 @@ INITIALIZATION.
 * Pestanas
   tab1 = 'Chequeos'.
   tab2 = 'Parametros'.
+  tab3 = 'Envio por mail'.
   tabs-prog      = sy-repid.
   tabs-dynnr     = 101.
   tabs-activetab = 'TAB1'.
@@ -289,6 +344,20 @@ INITIALIZATION.
   c_ldias = 'Avisar vencimientos dentro de'.
   u_ldias = 'dias'.
 
+* Pestana Envio por mail
+  t_mail  = 'Envio del reporte por mail'.
+  c_mail  = 'Enviar el reporte por mail al terminar'.
+  c_mto   = 'Para (una o varias direcciones)'.
+  c_mcc   = 'Con copia (CC)'.
+  c_mfrom = 'Remitente (vacio = usuario)'.
+  c_msubj = 'Asunto (vacio = automatico)'.
+  c_mnote = 'Requiere SAPconnect (SCOT) configurado. El estado se agrega al asunto.'.
+  t_when  = 'Cuando enviar'.
+  c_mall  = 'Siempre'.
+  c_mwarn = 'Solo si hay errores, advertencias o incompletos'.
+  c_merr  = 'Solo si hay errores'.
+  c_mimm  = 'Envio inmediato (sin esperar el job de SCOT)'.
+
 * ST22: por defecto, ultimas 24 h. Se puede cambiar y guardar en una
 * variante (con variable de seleccion de fecha si se usa en un job).
   p_dmpdt = sy-datum - 1.
@@ -308,6 +377,9 @@ AT SELECTION-SCREEN.
          AND x_cert IS INITIAL AND x_st03 IS INITIAL AND x_smlg IS INITIAL
          AND x_scot IS INITIAL AND p_lic IS INITIAL.
         MESSAGE 'Seleccione al menos un chequeo (pestana Chequeos)' TYPE 'E'.
+      ENDIF.
+      IF p_mail = 'X' AND s_mto[] IS INITIAL.
+        MESSAGE 'Indique al menos un destinatario (pestana Envio por mail)' TYPE 'E'.
       ENDIF.
   ENDCASE.
 
@@ -333,6 +405,10 @@ START-OF-SELECTION.
   IF p_lic  = 'X'. PERFORM check_license.      ENDIF.
 
   PERFORM calculate_global.
+  IF p_mail = 'X'.
+    PERFORM send_mail.
+    PERFORM calculate_global.         "incluye el resultado del envio
+  ENDIF.
   PERFORM build_fieldcat.
   PERFORM display_report.
 
@@ -403,6 +479,8 @@ FORM add_result USING p_control TYPE any
       ls_res-seq = 12.  ls_res-tcode = 'SCOT'.     ls_res-checkdesc = 'SAPconnect (correo)'.
     WHEN 'SLICENSE'.
       ls_res-seq = 13.  ls_res-tcode = 'SLICENSE'. ls_res-checkdesc = 'Licencia SAP'.
+    WHEN 'MAIL'.
+      ls_res-seq = 14.  ls_res-tcode = 'SOST'.     ls_res-checkdesc = 'Envio del reporte por mail'.
     WHEN OTHERS.
       ls_res-seq = 99. ls_res-tcode = ls_res-control. ls_res-checkdesc = ls_res-control.
   ENDCASE.
@@ -2693,6 +2771,205 @@ FORM check_license.
 ENDFORM.
 
 *======================================================================*
+* Envio del reporte por mail (pestana 3)
+*  El cuerpo es una tabla HTML con los mismos datos y colores del ALV.
+*  Se envia con CL_BCS; la salida real la hace SAPconnect (SCOT/SOST).
+*======================================================================*
+FORM html_escape CHANGING p_text TYPE string.
+  REPLACE ALL OCCURRENCES OF '&' IN p_text WITH '&amp;'.
+  REPLACE ALL OCCURRENCES OF '<' IN p_text WITH '&lt;'.
+  REPLACE ALL OCCURRENCES OF '>' IN p_text WITH '&gt;'.
+  REPLACE ALL OCCURRENCES OF '"' IN p_text WITH '&quot;'.
+ENDFORM.
+
+FORM status_colors USING p_status TYPE c CHANGING p_bg TYPE string p_fg TYPE string.
+  CASE p_status.
+    WHEN gc_ok.   p_bg = '#d4edda'. p_fg = '#155724'.
+    WHEN gc_warn. p_bg = '#fff3cd'. p_fg = '#856404'.
+    WHEN gc_err.  p_bg = '#f8d7da'. p_fg = '#721c24'.
+    WHEN OTHERS.  p_bg = '#ffe5cc'. p_fg = '#8a4b08'.
+  ENDCASE.
+ENDFORM.
+
+FORM build_mail_html CHANGING pt_soli TYPE soli_tab.
+  CONSTANTS lc_td TYPE string VALUE 'border:1px solid #c8c8c8;padding:4px 6px;vertical-align:top;'.
+
+  DATA: lt_res    TYPE STANDARD TABLE OF ty_result,
+        ls_res    TYPE ty_result,
+        lv_html   TYPE string,
+        lv_bg     TYPE string,
+        lv_fg     TYPE string,
+        lv_gtext  TYPE c LENGTH 12,
+        lv_last   TYPE string,
+        lv_key    TYPE string,
+        lv_tcode  TYPE string,
+        lv_desc   TYPE string,
+        lv_sum    TYPE string,
+        lv_det    TYPE string,
+        lv_zebra  TYPE string,
+        lv_n      TYPE i,
+        lv_len    TYPE i,
+        lv_off    TYPE i,
+        ls_soli   TYPE soli.
+
+  PERFORM status_text USING gv_global CHANGING lv_gtext.
+  PERFORM status_colors USING gv_global CHANGING lv_bg lv_fg.
+
+  lv_html = |<html><body style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;">| &&
+            |<h2 style="margin:0 0 4px 0;">SAP Daily Health Check</h2>| &&
+            |<div style="color:#555;">Sistema { sy-sysid } - Mandante { sy-mandt } - Host { sy-host } - | &&
+            |{ sy-datum DATE = USER } { sy-uzeit TIME = USER }</div>| &&
+            |<div style="margin:10px 0;padding:8px 12px;background:{ lv_bg };color:{ lv_fg };| &&
+            |border:1px solid { lv_fg };font-weight:bold;">Estado general: { lv_gtext }| &&
+            |&nbsp;&nbsp;&nbsp;Errores: { gv_cnt_err } - Advertencias: { gv_cnt_warn } - | &&
+            |Incompletos: { gv_cnt_inc } - OK: { gv_cnt_ok }</div>| &&
+            |<table style="border-collapse:collapse;width:100%;font-size:12px;">| &&
+            |<tr style="background:#354a5f;color:#ffffff;">| &&
+            |<th style="{ lc_td }text-align:left;">Transaccion</th>| &&
+            |<th style="{ lc_td }text-align:left;">Chequeo</th>| &&
+            |<th style="{ lc_td }text-align:left;">Estado</th>| &&
+            |<th style="{ lc_td }text-align:left;">Resultado</th>| &&
+            |<th style="{ lc_td }text-align:left;">Detalle</th></tr>|.
+
+* Mismo orden que el ALV; transaccion y chequeo solo en la 1ra fila
+  lt_res = gt_result.
+  SORT lt_res BY seq tcode checkdesc rowno.
+  LOOP AT lt_res INTO ls_res.
+    lv_n = lv_n + 1.
+    IF lv_n MOD 2 = 0.
+      lv_zebra = 'background:#f6f6f6;'.
+    ELSE.
+      lv_zebra = 'background:#ffffff;'.
+    ENDIF.
+
+    lv_key = |{ ls_res-tcode }{ ls_res-checkdesc }|.
+    IF lv_key = lv_last.
+      CLEAR: lv_tcode, lv_desc.
+    ELSE.
+      lv_tcode = ls_res-tcode.
+      lv_desc  = ls_res-checkdesc.
+      lv_last  = lv_key.
+    ENDIF.
+    lv_sum = ls_res-summary.
+    lv_det = ls_res-detail.
+    PERFORM html_escape CHANGING: lv_tcode, lv_desc, lv_sum, lv_det.
+    PERFORM status_colors USING ls_res-status CHANGING lv_bg lv_fg.
+
+    lv_html = |{ lv_html }<tr style="{ lv_zebra }">| &&
+              |<td style="{ lc_td }font-weight:bold;">{ lv_tcode }</td>| &&
+              |<td style="{ lc_td }">{ lv_desc }</td>| &&
+              |<td style="{ lc_td }background:{ lv_bg };color:{ lv_fg };font-weight:bold;white-space:nowrap;">| &&
+              |{ ls_res-status_txt }</td>| &&
+              |<td style="{ lc_td }">{ lv_sum }</td>| &&
+              |<td style="{ lc_td }color:#444;">{ lv_det }</td></tr>|.
+  ENDLOOP.
+
+  lv_html = |{ lv_html }</table>| &&
+            |<p style="color:#888;font-size:11px;margin-top:12px;">Generado por | &&
+            |{ sy-repid } - usuario { sy-uname }</p></body></html>|.
+
+* String -> tabla de lineas de 255 caracteres
+  REFRESH pt_soli.
+  lv_len = strlen( lv_html ).
+  lv_off = 0.
+  WHILE lv_off < lv_len.
+    CLEAR ls_soli.
+    IF lv_len - lv_off > 255.
+      ls_soli-line = lv_html+lv_off(255).
+    ELSE.
+      ls_soli-line = lv_html+lv_off.
+    ENDIF.
+    APPEND ls_soli TO pt_soli.
+    lv_off = lv_off + 255.
+  ENDWHILE.
+ENDFORM.
+
+FORM send_mail.
+  DATA: lo_send   TYPE REF TO cl_bcs,
+        lo_doc    TYPE REF TO cl_document_bcs,
+        lo_rcp    TYPE REF TO if_recipient_bcs,
+        lo_sender TYPE REF TO cl_cam_address_bcs,
+        lx_bcs    TYPE REF TO cx_bcs,
+        lt_soli   TYPE soli_tab,
+        lv_subj   TYPE so_obj_des,
+        lv_gtext  TYPE c LENGTH 12,
+        lv_sent   TYPE os_boolean,
+        lv_to     TYPE string,
+        lv_text   TYPE string,
+        lv_sum    TYPE string,
+        lv_det    TYPE string.
+
+* Condicion de envio
+  IF r_merr = 'X' AND gv_global <> gc_err.
+    PERFORM add_result USING 'MAIL' gc_ok 'No se envio: no hubo errores'
+      'Opcion elegida: enviar solo si hay errores'.
+    RETURN.
+  ENDIF.
+  IF r_mwarn = 'X' AND gv_global = gc_ok.
+    PERFORM add_result USING 'MAIL' gc_ok 'No se envio: todo OK'
+      'Opcion elegida: enviar solo si hay errores, advertencias o incompletos'.
+    RETURN.
+  ENDIF.
+
+  PERFORM status_text USING gv_global CHANGING lv_gtext.
+  IF p_msubj IS INITIAL.
+    lv_subj = |Health check { sy-sysid }/{ sy-mandt } { sy-datum DATE = USER } - { lv_gtext }|.
+  ELSE.
+    lv_subj = |{ p_msubj } - { lv_gtext }|.
+  ENDIF.
+
+  PERFORM build_mail_html CHANGING lt_soli.
+
+  TRY.
+      lo_send = cl_bcs=>create_persistent( ).
+      lo_doc = cl_document_bcs=>create_document(
+                 i_type    = 'HTM'
+                 i_text    = lt_soli
+                 i_subject = lv_subj ).
+      lo_send->set_document( lo_doc ).
+
+      IF p_mfrom IS NOT INITIAL.
+        lo_sender = cl_cam_address_bcs=>create_internet_address( p_mfrom ).
+        lo_send->set_sender( lo_sender ).
+      ENDIF.
+
+      LOOP AT s_mto WHERE sign = 'I' AND low IS NOT INITIAL.
+        lo_rcp = cl_cam_address_bcs=>create_internet_address( s_mto-low ).
+        lo_send->add_recipient( i_recipient = lo_rcp i_express = 'X' ).
+        IF lv_to IS INITIAL.
+          lv_to = s_mto-low.
+        ELSE.
+          lv_to = |{ lv_to }, { s_mto-low }|.
+        ENDIF.
+      ENDLOOP.
+      LOOP AT s_mcc WHERE sign = 'I' AND low IS NOT INITIAL.
+        lo_rcp = cl_cam_address_bcs=>create_internet_address( s_mcc-low ).
+        lo_send->add_recipient( i_recipient = lo_rcp i_copy = 'X' ).
+      ENDLOOP.
+
+      lo_send->set_send_immediately( p_mimm ).
+      lv_sent = lo_send->send( i_with_error_screen = space ).
+      COMMIT WORK.
+
+      IF lv_sent = 'X'.
+        lv_sum = |Mail generado para { lv_to }|.
+        IF p_mimm = 'X'.
+          lv_det = |Asunto: { lv_subj } - salida inmediata; ver estado en SOST|.
+        ELSE.
+          lv_det = |Asunto: { lv_subj } - queda en cola hasta el proximo job de SCOT (SOST)|.
+        ENDIF.
+        PERFORM add_result USING 'MAIL' gc_ok lv_sum lv_det.
+      ELSE.
+        PERFORM add_result USING 'MAIL' gc_err 'No se pudo generar el mail'
+          'CL_BCS->SEND devolvio falso. Revisar SOST / SCOT'.
+      ENDIF.
+    CATCH cx_bcs INTO lx_bcs.
+      lv_text = lx_bcs->get_text( ).
+      PERFORM add_result USING 'MAIL' gc_err 'Error al enviar el mail' lv_text.
+  ENDTRY.
+ENDFORM.
+
+*======================================================================*
 * Estado global y ALV
 *======================================================================*
 FORM calculate_global.
@@ -2702,6 +2979,7 @@ FORM calculate_global.
         lv_inc  TYPE i,
         lv_msg  TYPE string.
 
+  CLEAR gv_cnt_ok.
   LOOP AT gt_result INTO ls_res.
     CASE ls_res-status.
       WHEN gc_err.  lv_err  = lv_err + 1.
