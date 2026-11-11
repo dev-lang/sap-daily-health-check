@@ -8,6 +8,9 @@ Reports ABAP para el control diario de Basis de un sistema SAP, con salida en un
 | [`ZDAILY_HEALTH_CHECK`](src/ZDAILY_HEALTH_CHECK.abap) | Health check general: SICK, ST22, SM12, SM13, SM50, RTCCTOOL, STRUST, ST03N, SMLG, SCOT, SLICENSE |
 | [`ZDAILY_JOB_CHECK`](src/ZDAILY_JOB_CHECK.abap) | Jobs de fondo (SM37), un chequeo por status |
 
+Cómo lee y evalúa cada dato (FMs, tablas, criterios): [ZDAILY_HEALTH_CHECK](docs/ZDAILY_HEALTH_CHECK.md) ·
+[ZDAILY_JOB_CHECK](docs/ZDAILY_JOB_CHECK.md).
+
 Probado en SAP ECC 6.0 EHP6 (SAP_BASIS 731, kernel 722, Sybase ASE). Las llamadas a FMs y tablas
 que pueden cambiar entre releases se hacen en forma dinámica: si algo no existe o tiene otra interfaz,
 el chequeo queda **INCOMPLETO** con el motivo, en lugar de dar dump.
