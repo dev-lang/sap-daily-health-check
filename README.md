@@ -12,6 +12,10 @@ Probado en SAP ECC 6.0 EHP6 (SAP_BASIS 731, kernel 722, Sybase ASE). Las llamada
 que pueden cambiar entre releases se hacen en forma dinámica: si algo no existe o tiene otra interfaz,
 el chequeo queda **INCOMPLETO** con el motivo, en lugar de dar dump.
 
+![Resultado de ZDAILY_HEALTH_CHECK](docs/img/hc_alv.png)
+
+> Capturas reales del sistema de laboratorio BAS/001 (host `sapzrv`).
+
 ## ZDAILY_HEALTH_CHECK – chequeos
 
 | Transacción | Chequeo | Criterio |
@@ -46,11 +50,20 @@ La pantalla de selección tiene pestañas:
 - **Parámetros**: umbrales de cada control (horas de bloqueo, minutos de HOLD, días de aviso, etc.).
 - **Envio por mail**: envía el reporte al terminar (ver abajo).
 
+| Chequeos | Parámetros |
+|---|---|
+| ![Pestaña Chequeos](docs/img/hc_chequeos.png) | ![Pestaña Parametros](docs/img/hc_parametros.png) |
+
+El resultado es un ALV agrupado por transacción, con semáforo, estado coloreado y un encabezado
+con el estado general y el conteo de errores, advertencias, incompletos y OK (ver la captura de arriba).
+
 ### Envío por mail
 
 Con la tilde *Enviar el reporte por mail* el programa manda el resultado con `CL_BCS`.
 El cuerpo del mail es la misma tabla del ALV en HTML (estado general arriba, celda de estado
 coloreada), así que se lee directo en el cliente de correo, sin adjuntos.
+
+![Pestaña Envio por mail](docs/img/hc_mail.png)
 
 - **Para / CC**: una o varias direcciones.
 - **Remitente**: opcional (si se deja vacío, el del usuario en SU01). Con proveedores SMTP
@@ -91,6 +104,23 @@ ALV tipo tablero y mail en HTML). Un chequeo por cada status de SM37; por defect
 - Filtros: nombre de job (admite patrones como `Z*`) y opción para excluir los jobs estándar `SAP_*`.
 - Máximo 200 jobs por status; el resumen indica si hay más.
 - Si corre como job de fondo, no se lista a sí mismo.
+
+| Chequeos | Parámetros |
+|---|---|
+| ![Pestaña Chequeos del job check](docs/img/job_chequeos.png) | ![Pestaña Parametros del job check](docs/img/job_parametros.png) |
+
+### Ejemplo: jobs cancelados
+
+Ejecución con los valores por defecto (*Activa* y *Cancelado*) buscando desde el **06.11.2026 00:00:00**.
+No hay jobs en ejecución y aparecen 5 cancelados, cada uno con su fecha/hora:
+
+![ZDAILY_JOB_CHECK con jobs cancelados](docs/img/job_alv.png)
+
+En la columna *Detalle* figuran programa, usuario, servidor, mandante y el error tomado del log
+del job (en este caso `STRING_LENGTH_TOO_LARGE` y `EXPORT_TABLE_UPDATE_CONFLICT`, ver ST22).
+En pantalla se corta a 128 caracteres (ver *Limitaciones conocidas*); en el mail sale completo.
+
+![Detalle de los jobs cancelados](docs/img/job_alv_detalle.png)
 
 ## Limitaciones conocidas
 
