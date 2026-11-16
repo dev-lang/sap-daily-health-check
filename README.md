@@ -6,6 +6,7 @@ Reports ABAP para el control diario de Basis de un sistema SAP, con salida en un
 | Programa | Qué controla |
 |---|---|
 | [`ZDAILY_HEALTH_CHECK`](src/ZDAILY_HEALTH_CHECK.abap) | Health check general: SICK, ST22, SM12, SM13, SM50, RTCCTOOL, STRUST, ST03N, SMLG, SCOT, SLICENSE |
+| [`ZDAILY_HEALTH_CHECK_V2`](src/ZDAILY_HEALTH_CHECK_V2.abap) | Versión 2 del health check (en prueba): mismos chequeos + licencias firmadas, criterio único de certificados y System PKI informativo ([cambios](#zdaily_health_check-v2--cambios)) |
 | [`ZDAILY_JOB_CHECK`](src/ZDAILY_JOB_CHECK.abap) | Jobs de fondo (SM37), un chequeo por status |
 
 Cómo lee y evalúa cada dato (FMs, tablas, criterios): [ZDAILY_HEALTH_CHECK](docs/ZDAILY_HEALTH_CHECK.md) ·
@@ -36,11 +37,48 @@ el chequeo queda **INCOMPLETO** con el motivo, en lugar de dar dump.
 | SLICENSE | Licencia SAP | Vencimiento de la licencia activa (misma lógica que SLICENSE) |
 | SOST | Envío por mail | Resultado del envío del reporte (opcional) |
 
+## ZDAILY_HEALTH_CHECK V2 – cambios
+
+[`src/ZDAILY_HEALTH_CHECK_V2.abap`](src/ZDAILY_HEALTH_CHECK_V2.abap) es la versión 2 del health check.
+Tiene los mismos chequeos, pantalla y envío por mail que la versión actual, con estos cambios:
+
+| Transacción | Chequeo | Cambio en la V2 |
+|---|---|---|
+| STRUST | Certificados | Mismo criterio para certificados **propios y de confianza**: vencido = **Error**, por vencer dentro de N días = **Advertencia**. Antes un certificado de confianza vencido daba solo Advertencia. La fila de resumen dice "N vencido(s), M por vencer en X dias". |
+| STRUST | Certificados | Los PSE de **System PKI** (`sap_system_pki*`, gestionados por el kernel y protegidos con PIN) no se leen: salen como fila informativa **OK** ("PSE de System PKI, gestionado por el kernel"). Antes quedaban **Incompleto**. |
+| SLICENSE | Licencias antiguas | Es el chequeo de licencia de siempre (vencimiento de la licencia activa), ahora con ese nombre. |
+| SLICENSE | **Licencias firmadas** (nuevo) | Ítem aparte, con su propia tilde en *Chequeos* (*Licencias firmadas y cert. mantenimiento*). Ver abajo. |
+
+### Licencias firmadas (nuevo en la V2)
+
+Revisa las licencias nuevas (firmadas) del SID con `SLIC_LIKEY_GET_ALL_LICENSES`, el mismo origen que la
+pantalla de licencias firmadas de SLICENSE:
+
+- **Por licencia**, según su validez: SID incorrecto, temporal no permitida, vencida o firma no válida = **Error**;
+  validez desconocida o todavía no válida = **Advertencia**. Si es válida, se mira el vencimiento:
+  permanente (31.12.9999) = OK, vencida = **Error**, vence dentro de N días = **Advertencia**
+  (mismo parámetro *Avisar vencimientos dentro de* que las licencias antiguas).
+- **Producto estándar** (por ejemplo `NetWeaver_SYB`): se verifica con `SLIC_LIKEY_CHECK`; si no hay
+  licencia válida, **Error**.
+- **Certificado de mantenimiento** (`Maintenance_<base de datos>`): si está instalado se evalúa como
+  cualquier licencia; si no está instalado sale como fila **informativa OK**.
+- Fila de resumen "N licencia(s) firmada(s) para SID" con el peor estado, y debajo una fila por licencia.
+  No muestra la clave de hardware ni el número de instalación.
+
+### Pendiente para cerrar la V2
+
+- Nombre final del programa (hoy `REPORT zdaily_health_check`, en el sistema se prueba como `ZDAILY_HEALTH_CHECK_V2`).
+- Actualizar [docs/ZDAILY_HEALTH_CHECK.md](docs/ZDAILY_HEALTH_CHECK.md) con los criterios de la V2.
+
 ## Instalación
 
 1. SE38 → crear `ZDAILY_HEALTH_CHECK` (tipo *Programa ejecutable*).
 2. Pegar el contenido de [`src/ZDAILY_HEALTH_CHECK.abap`](src/ZDAILY_HEALTH_CHECK.abap) y activar.
    No hace falta crear elementos de texto: los textos de pantalla se cargan desde el código.
+
+Para probar la V2 sin tocar la versión actual, crear `ZDAILY_HEALTH_CHECK_V2` y pegar
+[`src/ZDAILY_HEALTH_CHECK_V2.abap`](src/ZDAILY_HEALTH_CHECK_V2.abap) (la sentencia `REPORT` interna no
+tiene que coincidir con el nombre del programa).
 
 Si al activar aparece `GEN_SELECTION_SCREEN_ERROR`, ejecutar el programa `RSDBGENA` sobre
 `ZDAILY_HEALTH_CHECK` para ver el detalle (por ejemplo, *Screen contains overlapping objects*).
