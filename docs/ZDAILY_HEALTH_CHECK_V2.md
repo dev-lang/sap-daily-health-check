@@ -11,14 +11,30 @@ cambian son iguales en los dos documentos.
 
 ## Diferencias con la v1
 
-| Chequeo | v1 (v25) | V2 | Sección |
+| Cambio | Antes (v1) | Ahora (V2) | Ejemplo |
 |---|---|---|---|
-| STRUST | Certificado de confianza vencido = Advertencia | Vencido = **Error** para propios y de confianza | [STRUST](#strust--certificados) |
-| STRUST | Resumen en Advertencia si alguno tuvo aviso | Resumen en **Error** si hay vencidos, Advertencia si solo hay por vencer | [STRUST](#strust--certificados) |
-| STRUST | PSE de System PKI = Incompleto (no se puede leer) | Fila informativa **OK**, no se lee | [System PKI](#pse-de-system-pki) |
-| SLICENSE | "Licencia SAP" | Mismo chequeo, ahora "Licencias antiguas" | [Licencias antiguas](#slicense--licencias-antiguas) |
-| SLICENSE | – | Nuevo: **Licencias firmadas** y certificado de mantenimiento | [Licencias firmadas](#slicense--licencias-firmadas-nuevo-en-la-v2) |
-| Pantalla | – | Tilde nueva `P_LIKEY` en *Chequeos* | [Licencias firmadas](#slicense--licencias-firmadas-nuevo-en-la-v2) |
+| Certificado de confianza vencido | Advertencia | **Error**, igual que un certificado propio vencido | Un PSE con un certificado de confianza vencido pone el chequeo en rojo |
+| Fila final de certificados | Advertencia si había cualquier aviso | **Error** si hay vencidos; Advertencia si solo hay por vencer | "1 vencido(s), 0 por vencer en 30 dias" |
+| PSE de System PKI | Incompleto (no se puede leer) | Fila informativa en **OK**, no se lee | "sap_system_pki_instance.pse: PSE de System PKI, gestionado por el kernel" |
+| **Licencias firmadas** (formato nuevo) | **No se revisaban**: solo se miraban las licencias antiguas | **Chequeo nuevo** con su tilde: cada licencia firmada, la clave del producto del sistema (`NetWeaver_SYB`) y el certificado de mantenimiento (`Maintenance_SYB`) | La licencia firmada temporal de `NetWeaver_SYB` venció: la v1 daba OK, la V2 da **Error** |
+| Licencias antiguas (formato clásico) | Chequeo "Licencia SAP" | El mismo chequeo, sin cambios de lógica; ahora se llama "Licencias antiguas" | Mismo resultado en las dos versiones |
+
+### Licencias antiguas y licencias firmadas
+
+SAP maneja dos formatos de licencia y SLICENSE muestra los dos:
+
+- **Licencias antiguas:** formato clásico, una clave atada a la clave de hardware del servidor,
+  con fecha de vencimiento. Es lo único que revisa la v1 (`SLIC_READ_LICENSES`), y la V2 lo
+  sigue revisando igual.
+- **Licencias firmadas:** formato nuevo, con firma digital, una licencia por producto
+  (`NetWeaver_SYB` para el sistema, `Maintenance_SYB` para el certificado de mantenimiento). Son las
+  de la pantalla principal de SLICENSE. La v1 no las mira; la V2 las revisa en el chequeo nuevo
+  *Licencias firmadas*.
+
+Por qué importa: en el laboratorio venció la licencia firmada temporal de `NetWeaver_SYB` mientras
+seguía instalada una licencia antigua permanente. La v1 informaba **OK** (la licencia antigua no
+vence) aunque el sistema se había quedado sin clave firmada válida para su producto; la V2 lo marca
+en **Error**.
 
 ## Índice
 

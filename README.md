@@ -47,8 +47,8 @@ Tiene los mismos chequeos, pantalla y envío por mail que la versión actual, co
 |---|---|---|
 | STRUST | Certificados | Mismo criterio para certificados **propios y de confianza**: vencido = **Error**, por vencer dentro de N días = **Advertencia**. Antes un certificado de confianza vencido daba solo Advertencia. La fila de resumen dice "N vencido(s), M por vencer en X dias". |
 | STRUST | Certificados | Los PSE de **System PKI** (`sap_system_pki*`, gestionados por el kernel y protegidos con PIN) no se leen: salen como fila informativa **OK** ("PSE de System PKI, gestionado por el kernel"). Antes quedaban **Incompleto**. |
-| SLICENSE | Licencias antiguas | Es el chequeo de licencia de siempre (vencimiento de la licencia activa), ahora con ese nombre. |
-| SLICENSE | **Licencias firmadas** (nuevo) | Ítem aparte, con su propia tilde en *Chequeos* (*Licencias firmadas y cert. mantenimiento*). Ver abajo. |
+| SLICENSE | **Licencias firmadas** (nuevo) | La v1 solo revisa las licencias **antiguas** (formato clásico, atado a la clave de hardware). La V2 suma las licencias **firmadas** (formato nuevo, una por producto, las de la pantalla principal de SLICENSE) en un ítem aparte con su propia tilde. Ver abajo. |
+| SLICENSE | Licencias antiguas | El chequeo de licencia de la v1, sin cambios de lógica; solo cambia el nombre a *Licencias antiguas*. |
 
 ### Licencias firmadas (nuevo en la V2)
 
