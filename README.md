@@ -10,7 +10,7 @@ Reports ABAP para el control diario de Basis de un sistema SAP, con salida en un
 | [`ZDAILY_JOB_CHECK`](src/ZDAILY_JOB_CHECK.abap) | Jobs de fondo (SM37), un chequeo por status |
 
 Cómo lee y evalúa cada dato (FMs, tablas, criterios): [ZDAILY_HEALTH_CHECK](docs/ZDAILY_HEALTH_CHECK.md) ·
-[ZDAILY_JOB_CHECK](docs/ZDAILY_JOB_CHECK.md).
+[ZDAILY_HEALTH_CHECK V2](docs/ZDAILY_HEALTH_CHECK_V2.md) · [ZDAILY_JOB_CHECK](docs/ZDAILY_JOB_CHECK.md).
 
 Probado en SAP ECC 6.0 EHP6 (SAP_BASIS 731, kernel 722, Sybase ASE). Las llamadas a FMs y tablas
 que pueden cambiar entre releases se hacen en forma dinámica: si algo no existe o tiene otra interfaz,
@@ -40,7 +40,8 @@ el chequeo queda **INCOMPLETO** con el motivo, en lugar de dar dump.
 ## ZDAILY_HEALTH_CHECK V2 – cambios
 
 [`src/ZDAILY_HEALTH_CHECK_V2.abap`](src/ZDAILY_HEALTH_CHECK_V2.abap) es la versión 2 del health check.
-Tiene los mismos chequeos, pantalla y envío por mail que la versión actual, con estos cambios:
+Tiene los mismos chequeos, pantalla y envío por mail que la versión actual, con estos cambios
+(detalle técnico y pruebas en [docs/ZDAILY_HEALTH_CHECK_V2.md](docs/ZDAILY_HEALTH_CHECK_V2.md)):
 
 | Transacción | Chequeo | Cambio en la V2 |
 |---|---|---|
@@ -68,7 +69,7 @@ pantalla de licencias firmadas de SLICENSE:
 ### Pendiente para cerrar la V2
 
 - Nombre final del programa (hoy `REPORT zdaily_health_check`, en el sistema se prueba como `ZDAILY_HEALTH_CHECK_V2`).
-- Actualizar [docs/ZDAILY_HEALTH_CHECK.md](docs/ZDAILY_HEALTH_CHECK.md) con los criterios de la V2.
+  Cuando la V2 quede como definitiva, su doc reemplaza a [docs/ZDAILY_HEALTH_CHECK.md](docs/ZDAILY_HEALTH_CHECK.md).
 
 ## Instalación
 
