@@ -18,7 +18,7 @@ cambian son iguales en los dos documentos.
 | PSE de System PKI | Incompleto (no se puede leer) | Fila informativa en **OK**, no se lee | "sap_system_pki_instance.pse: PSE de System PKI, gestionado por el kernel" |
 | **Licencias firmadas** (formato nuevo) | **No se revisaban**: solo se miraban las licencias antiguas | **Chequeo nuevo** con su tilde: cada licencia firmada, la clave del producto del sistema (`NetWeaver_SYB`) y el certificado de mantenimiento (`Maintenance_SYB`) | La licencia firmada temporal de `NetWeaver_SYB` venció: la v1 daba OK, la V2 da **Error** |
 | Licencias antiguas (formato clásico) | Chequeo "Licencia SAP" | El mismo chequeo, sin cambios de lógica; ahora se llama "Licencias antiguas" | Mismo resultado en las dos versiones |
-| RTCCTOOL | Ejecuta RTCCTOOL y lee los íconos de la lista | **No lo ejecuta**: lee el resultado de la última corrida que ST-A/PI guarda en `/SSF/BTAB`, y avisa si esa corrida es vieja | Sin popups de conexión a SAP ni corridas nuevas; "Nota 539977: Support Package de ST-PI pendiente" en **Error** |
+| RTCCTOOL | Ejecuta RTCCTOOL y lee los íconos de la lista | **No lo ejecuta**: lee el resultado de la última corrida que ST-A/PI guarda en `/SSF/BTAB`, avisa si esa corrida es vieja o si usa recomendaciones sin actualizar desde SAP | Sin popups de conexión a SAP ni corridas nuevas; "Nota 539977: Support Package de ST-PI pendiente" en **Error** |
 
 ### Licencias antiguas y licencias firmadas
 
@@ -322,6 +322,12 @@ recomendación de la última corrida en `/SSF/BTAB`, con `RELID = 'TC'`, `PID = 
 estado automático, estado manual, estado anterior, fecha y hora de la revisión). El chequeo lo
 lee con la rutina de ST-A/PI `BTAB_READ_TABLE` de `/SSF/SLIB`.
 
+También lee la fecha y hora del último refresh de recomendaciones desde SAP
+(`TC`/`NXS`/`SAPNET_REFRESH_DATE` y `SAPNET_REFRESH_TIME`, con `BTAB_READ_DATA`). RTCCTOOL
+las graba solo cuando logra conectarse a SAP. Si corre con *Use outdated/delivered
+recommendations* (sin conexión), no se graban, y el resultado sale de las recomendaciones
+entregadas con ST-A/PI.
+
 Todo es dinámico (`PERFORM ... IN PROGRAM ... IF FOUND`, `CREATE DATA ... TYPE ('/SSF/LOG')`),
 así que el programa compila igual en un sistema sin ST-A/PI.
 
@@ -343,11 +349,13 @@ recomendaciones conocidas (`rtcc_title`) y el nombre interno para el resto.
 |---|---|
 | ST-A/PI no instalado (no existe `/SSF/SLIB`) | **Incompleto** "ST-A/PI no instalado" |
 | No hay datos (RTCCTOOL nunca corrió) | **Incompleto** "Sin resultados de RTCCTOOL" |
-| Resumen | "N en rojo, M en amarillo, K en verde" con la fecha de la última corrida; estado del peor |
+| Resumen | "N en rojo, M en amarillo, K en verde" con la fecha de la última corrida y de qué son las recomendaciones ("de SAP del dd.mm.aaaa" o "entregadas (sin conexión a SAP)"); estado del peor |
+| Nunca hubo refresh desde SAP | **Advertencia** "Recomendaciones sin actualizar desde SAP" (revisar los destinos `SAP-SUPPORT_PORTAL` / `SAPOSS`) |
+| Último refresh con más de `P_RTCRD` días | **Advertencia** "Recomendaciones actualizadas desde SAP hace N días" |
 | Última corrida con más de `P_RTCDD` días | **Advertencia** "RTCCTOOL no se ejecuta hace N días" |
 | Cada recomendación en rojo o amarillo | Una fila con nota, título y estado (rojas primero) |
 
-**Parámetros:** `P_RTCDD` (días sin correr, por defecto 7).
+**Parámetros:** `P_RTCDD` (días sin correr, por defecto 7) y `P_RTCRD` (días sin refresh de recomendaciones desde SAP, por defecto 30).
 
 ---
 
@@ -699,7 +707,7 @@ guarda 255 y el mail lo muestra completo.
 | SM12 | `ENQUEUE_READ` | `T000` |
 | SM13 | – | `VBERROR`, `VBHDR` |
 | SM50 | `TH_WPINFO` (2da muestra) | – |
-| RTCCTOOL | `BTAB_READ_TABLE` (rutina de ST-A/PI en `/SSF/SLIB`) | `TRDIR`, `/SSF/BTAB` (TC/NXS/REC_IMPL_HIST) |
+| RTCCTOOL | `BTAB_READ_TABLE`, `BTAB_READ_DATA` (rutinas de ST-A/PI en `/SSF/SLIB`) | `TRDIR`, `/SSF/BTAB` (TC/NXS: `REC_IMPL_HIST`, `SAPNET_REFRESH_DATE`, `SAPNET_REFRESH_TIME`) |
 | STRUST | `C_SAPGPARAM`, `EPS_GET_DIRECTORY_LISTING`, `SSFC_GET_OWNCERTIFICATE`, `SSFC_GET_CERTIFICATELIST`, `SSFC_PARSE_CERTIFICATE` | – |
 | ST03N | `SWNC_COLLECTOR_GET_AGGREGATES`, `DATE_COMPUTE_DAY` | – |
 | SMLG | `RZL_STRG_READALL_I`, `SWNC_COLLECTOR_GET_AGGREGATES` | `RZLLITAB` |
@@ -729,4 +737,4 @@ v1 y la V2 sobre los mismos casos:
 | Licencia firmada temporal de `NetWeaver_SYB` que venció el 12.11.2026 | No la ve: la licencia antigua permanente sigue OK | Resumen en **Error**; producto `NetWeaver_SYB` sin clave válida (`NO_VALID_LICENSE_KEY`); licencia temporal vencida (`VALIDITY` 4) en Error |
 | Sin certificado de mantenimiento instalado | – | Fila informativa OK "Certificado de mantenimiento (Maintenance_SYB): no instalado" |
 | Licencias antiguas | OK | OK (mismo resultado, con el nombre nuevo) |
-| RTCCTOOL (20.11.2026, ST-A/PI 01X_731, sin conexión a SAP) | Ejecuta RTCCTOOL (popup de conexión) | Lee la corrida de las 12:36: "1 en rojo, 2 en amarillo, 4 en verde"; Error "Nota 539977: Support Package de ST-PI pendiente"; Advertencias por las notas 12103 y 69455. Coincide con la pantalla de RTCCTOOL |
+| RTCCTOOL (20.11.2026, ST-A/PI 01X_731, sin conexión a SAP) | Ejecuta RTCCTOOL (popup de conexión) | Lee la corrida de las 12:36: "1 en rojo, 2 en amarillo, 4 en verde" con recomendaciones entregadas; Advertencia "Recomendaciones sin actualizar desde SAP"; Error "Nota 539977: Support Package de ST-PI pendiente"; Advertencias por las notas 12103 y 69455. Coincide con la pantalla de RTCCTOOL |

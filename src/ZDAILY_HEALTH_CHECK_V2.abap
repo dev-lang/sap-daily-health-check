@@ -163,6 +163,12 @@ SELECTION-SCREEN POSITION 33.
 PARAMETERS p_rtcdd TYPE i DEFAULT 7.
 SELECTION-SCREEN COMMENT 48(24) u_rtcdd.
 SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 1(31) c_rtcrd FOR FIELD p_rtcrd.
+SELECTION-SCREEN POSITION 33.
+PARAMETERS p_rtcrd TYPE i DEFAULT 30.
+SELECTION-SCREEN COMMENT 48(24) u_rtcrd.
+SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN END OF BLOCK b_rtcc.
 
 SELECTION-SCREEN BEGIN OF BLOCK b_perf WITH FRAME TITLE t_perf.
@@ -352,6 +358,8 @@ INITIALIZATION.
   t_rtcc  = 'Herramientas de servicio (RTCCTOOL)'.
   c_rtcdd = 'Avisar si no corre hace mas de'.
   u_rtcdd = 'dias'.
+  c_rtcrd = 'Recomendac. de SAP: avisar tras'.
+  u_rtcrd = 'dias sin actualizar'.
 
   t_perf  = 'Tiempos de respuesta (SMLG / ST03N)'.
   c_rtlim = 'Tiempo de respuesta maximo'.
@@ -1876,6 +1884,8 @@ ENDFORM.
 *  ST-A/PI guarda en /SSF/BTAB (RELID 'TC', PID 'NXS', OBJKEY
 *  'REC_IMPL_HIST'), con la rutina de ST-A/PI BTAB_READ_TABLE(/SSF/SLIB).
 *  Todo es dinamico para que el programa compile sin ST-A/PI.
+*  Tambien lee la fecha del ultimo refresh desde SAP (SAPNET_REFRESH_*):
+*  si no existe, RTCCTOOL corre con recomendaciones entregadas (outdated).
 *  Estado: el manual (Set->Green) manda sobre el automatico.
 *   IMPLEMENTED = OK; MISSING / ERROR = error; el resto = advertencia.
 *======================================================================*
@@ -1914,6 +1924,11 @@ FORM check_rtcctool.
         lv_title  TYPE c LENGTH 60,
         lv_dtxt   TYPE c LENGTH 10,
         lv_pass   TYPE i,
+        lv_rc2    TYPE sy-subrc,
+        lv_refd   TYPE d,
+        lv_reft   TYPE t,
+        lv_rdtxt  TYPE c LENGTH 10,
+        lv_rttxt  TYPE c LENGTH 8,
         lv_ttxt   TYPE c LENGTH 8,
         lv_sum    TYPE string,
         lv_det    TYPE string.
@@ -1957,6 +1972,29 @@ FORM check_rtcctool.
     RETURN.
   ENDIF.
 
+* Fecha del ultimo refresh de recomendaciones desde SAP.
+* RTCCTOOL la graba solo cuando logra conectarse (TC/NXS/SAPNET_REFRESH_*).
+* Si corre con "Use outdated/delivered recommendations" no se graba.
+  <lv_objkey> = 'SAPNET_REFRESH_DATE'.
+  lv_rc2 = 8.
+  PERFORM ('BTAB_READ_DATA') IN PROGRAM (lv_prog)
+          TABLES   <lt_log>
+          USING    <lv_relid> lv_pid <lv_objkey>
+          CHANGING lv_refd lv_rc2
+          IF FOUND.
+  IF lv_rc2 = 0 AND lv_refd IS NOT INITIAL.
+    <lv_objkey> = 'SAPNET_REFRESH_TIME'.
+    PERFORM ('BTAB_READ_DATA') IN PROGRAM (lv_prog)
+            TABLES   <lt_log>
+            USING    <lv_relid> lv_pid <lv_objkey>
+            CHANGING lv_reft lv_rc2
+            IF FOUND.
+    WRITE lv_refd TO lv_rdtxt DD/MM/YYYY.
+    WRITE lv_reft TO lv_rttxt USING EDIT MASK '__:__'.
+  ELSE.
+    CLEAR lv_refd.
+  ENDIF.
+
 * Primera pasada: totales y ultima corrida
   LOOP AT lt_hist INTO ls_hist.
     PERFORM rtcc_status USING ls_hist-tool_status ls_hist-manual_status
@@ -1989,7 +2027,26 @@ FORM check_rtcctool.
     lv_sum = |{ lv_red } en rojo, { lv_yel } en amarillo, { lv_green } en verde|.
   ENDIF.
   lv_det = |Ultima corrida de RTCCTOOL: { lv_dtxt } { lv_ttxt }|.
+  IF lv_refd IS NOT INITIAL.
+    lv_det = |{ lv_det } - recomendaciones de SAP del { lv_rdtxt } { lv_rttxt }|.
+  ELSE.
+    lv_det = |{ lv_det } - con recomendaciones entregadas (sin conexion a SAP)|.
+  ENDIF.
   PERFORM add_result USING 'RTCCTOOL' lv_stat lv_sum lv_det.
+
+* Recomendaciones desactualizadas
+  IF lv_refd IS INITIAL.
+    PERFORM add_result USING 'RTCCTOOL' gc_warn
+      'Recomendaciones sin actualizar desde SAP'
+      'RTCCTOOL no pudo conectarse a SAP y usa las recomendaciones entregadas (outdated). Revisar destinos SAP-SUPPORT_PORTAL / SAPOSS (nota 69455)'.
+  ELSE.
+    lv_days = sy-datum - lv_refd.
+    IF p_rtcrd > 0 AND lv_days > p_rtcrd.
+      lv_sum = |Recomendaciones actualizadas desde SAP hace { lv_days } dias|.
+      lv_det = |Ultimo refresh: { lv_rdtxt } { lv_rttxt }. Las corridas posteriores usaron recomendaciones viejas (sin conexion)|.
+      PERFORM add_result USING 'RTCCTOOL' gc_warn lv_sum lv_det.
+    ENDIF.
+  ENDIF.
 
 * Antiguedad de la ultima corrida
   lv_days = sy-datum - lv_maxd.

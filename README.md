@@ -49,7 +49,7 @@ Tiene los mismos chequeos, pantalla y envío por mail que la versión actual, co
 | STRUST | Certificados | Los PSE de **System PKI** (`sap_system_pki*`, gestionados por el kernel y protegidos con PIN) no se leen: salen como fila informativa **OK** ("PSE de System PKI, gestionado por el kernel"). Antes quedaban **Incompleto**. |
 | SLICENSE | **Licencias firmadas** (nuevo) | La v1 solo revisa las licencias **antiguas** (formato clásico, atado a la clave de hardware). La V2 suma las licencias **firmadas** (formato nuevo, una por producto, las de la pantalla principal de SLICENSE) en un ítem aparte con su propia tilde. Ver abajo. |
 | SLICENSE | Licencias antiguas | El chequeo de licencia de la v1, sin cambios de lógica; solo cambia el nombre a *Licencias antiguas*. |
-| RTCCTOOL | Herramientas de servicio | Ya no ejecuta RTCCTOOL: lee el resultado de la última corrida que ST-A/PI guarda en `/SSF/BTAB` (sin popups ni corridas nuevas) y avisa si esa corrida tiene más de N días. |
+| RTCCTOOL | Herramientas de servicio | Ya no ejecuta RTCCTOOL: lee el resultado de la última corrida que ST-A/PI guarda en `/SSF/BTAB` (sin popups ni corridas nuevas). Avisa si esa corrida tiene más de N días o si RTCCTOOL usa recomendaciones sin actualizar desde SAP (corrió sin conexión). |
 
 ### Licencias firmadas (nuevo en la V2)
 
