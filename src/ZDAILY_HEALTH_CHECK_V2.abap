@@ -271,6 +271,7 @@ TYPES: BEGIN OF ty_result,
          control    TYPE c LENGTH 15,         "interno
          status     TYPE c LENGTH 10,         "interno
          cellcolor  TYPE slis_t_specialcol_alv,
+         is_sum     TYPE c LENGTH 1,          "X = fila de resumen del chequeo
        END OF ty_result.
 
 TYPES: ty_text   TYPE c LENGTH 255,
@@ -296,7 +297,8 @@ DATA: gt_result   TYPE STANDARD TABLE OF ty_result,
       gv_cnt_err  TYPE i,
       gv_cnt_warn TYPE i,
       gv_cnt_inc  TYPE i,
-      gv_cnt_ok   TYPE i.
+      gv_cnt_ok   TYPE i,
+      gv_sumrow   TYPE c LENGTH 1.
 
 DATA: gt_servers   TYPE STANDARD TABLE OF msxxlist,
       gt_wp        TYPE ty_t_wp,
@@ -471,6 +473,7 @@ FORM add_result USING p_control TYPE any
 
   ls_res-control = p_control.
   ls_res-status  = p_status.
+  ls_res-is_sum  = gv_sumrow.
   ls_res-summary = p_summary.
   ls_res-detail  = p_detail.
   CONDENSE ls_res-summary.
@@ -540,6 +543,20 @@ ENDFORM.
 *----------------------------------------------------------------------*
 * Ejecuta un report con SUBMIT y devuelve su lista en texto
 *----------------------------------------------------------------------*
+*----------------------------------------------------------------------*
+* Fila de resumen de un chequeo: su estado es el peor de sus filas de
+* detalle, asi que no se cuenta en los totales del encabezado (si no,
+* un mismo problema se contaria dos veces). Igual se muestra.
+*----------------------------------------------------------------------*
+FORM add_summary USING p_control TYPE any
+                       p_status  TYPE any
+                       p_summary TYPE any
+                       p_detail  TYPE any.
+  gv_sumrow = 'X'.
+  PERFORM add_result USING p_control p_status p_summary p_detail.
+  CLEAR gv_sumrow.
+ENDFORM.
+
 FORM submit_list USING    p_prog  TYPE any
                  CHANGING pt_lines TYPE ty_t_text
                           p_ok     TYPE c
@@ -1204,7 +1221,7 @@ FORM check_st22.
   lv_sum = |{ lv_total } dump(s) desde { lv_from DATE = USER } { lv_ftime TIME = USER }|.
   lv_det = |Periodo: { lv_from DATE = USER } { lv_ftime TIME = USER } a | &&
            |{ sy-datum DATE = USER } { sy-uzeit TIME = USER }|.
-  PERFORM add_result USING 'ST22' lv_stat lv_sum lv_det.
+  PERFORM add_summary USING 'ST22' lv_stat lv_sum lv_det.
 
 * 4) Una fila por instancia
   SORT lt_inst BY inst.
@@ -1322,11 +1339,11 @@ FORM check_sm12.
   IF lv_old > 0.
     lv_sum = |{ lv_old } bloqueo(s) mayor(es) a { p_lockh } h|.
     lv_det = |{ lv_total } bloqueo(s) activo(s) en total|.
-    PERFORM add_result USING 'SM12' gc_err lv_sum lv_det.
+    PERFORM add_summary USING 'SM12' gc_err lv_sum lv_det.
   ELSE.
     lv_sum = |Sin bloqueos mayores a { p_lockh } h|.
     lv_det = |{ lv_total } bloqueo(s) activo(s) en total|.
-    PERFORM add_result USING 'SM12' gc_ok lv_sum lv_det.
+    PERFORM add_summary USING 'SM12' gc_ok lv_sum lv_det.
   ENDIF.
 
 * Detalle de cada bloqueo, del mas viejo al mas nuevo (max. 100)
@@ -2032,7 +2049,7 @@ FORM check_rtcctool.
   ELSE.
     lv_det = |{ lv_det } - con recomendaciones entregadas (sin conexion a SAP)|.
   ENDIF.
-  PERFORM add_result USING 'RTCCTOOL' lv_stat lv_sum lv_det.
+  PERFORM add_summary USING 'RTCCTOOL' lv_stat lv_sum lv_det.
 
 * Recomendaciones desactualizadas
   IF lv_refd IS INITIAL.
@@ -2376,13 +2393,13 @@ FORM check_certificates.
   lv_soon = lv_flag - lv_exp.
   IF lv_exp > 0.
     lv_det = |{ lv_exp } vencido(s), { lv_soon } por vencer en { p_cdias } dias (ver filas anteriores)|.
-    PERFORM add_result USING 'CERTIFICADOS' gc_err lv_sum lv_det.
+    PERFORM add_summary USING 'CERTIFICADOS' gc_err lv_sum lv_det.
   ELSEIF lv_flag > 0.
     lv_det = |{ lv_soon } por vencer en { p_cdias } dias (ver filas anteriores)|.
-    PERFORM add_result USING 'CERTIFICADOS' gc_warn lv_sum lv_det.
+    PERFORM add_summary USING 'CERTIFICADOS' gc_warn lv_sum lv_det.
   ELSE.
     lv_det = |Ninguno vence en los proximos { p_cdias } dias|.
-    PERFORM add_result USING 'CERTIFICADOS' gc_ok lv_sum lv_det.
+    PERFORM add_summary USING 'CERTIFICADOS' gc_ok lv_sum lv_det.
   ENDIF.
 ENDFORM.
 
@@ -2926,7 +2943,7 @@ FORM check_license.
   ELSE.
     lv_sum = |{ lv_nact } licencia(s) activa(s) de { lv_n } instalada(s)|.
     lv_det = |Clave de hardware actual: { lv_hwkey } - aviso con { p_ldias } dias de anticipacion|.
-    PERFORM add_result USING 'SLICENSE' lv_worst lv_sum lv_det.
+    PERFORM add_summary USING 'SLICENSE' lv_worst lv_sum lv_det.
   ENDIF.
 
   LOOP AT lt_rows INTO ls_row.
@@ -3215,7 +3232,7 @@ FORM check_license_likey.
     lv_det = |{ lv_det } - { lv_nother } de otros SID (no se evaluan)|.
   ENDIF.
   lv_det = |{ lv_det } - aviso con { p_ldias } dias de anticipacion|.
-  PERFORM add_result USING 'SLICENSE NEW' lv_worst lv_sum lv_det.
+  PERFORM add_summary USING 'SLICENSE NEW' lv_worst lv_sum lv_det.
 
   LOOP AT lt_rows INTO ls_row.
     PERFORM add_result USING 'SLICENSE NEW' ls_row-status ls_row-summary ls_row-detail.
@@ -3433,6 +3450,10 @@ FORM calculate_global.
 
   CLEAR gv_cnt_ok.
   LOOP AT gt_result INTO ls_res.
+*   Las filas de resumen repiten el peor estado de sus filas de detalle
+    IF ls_res-is_sum = 'X'.
+      CONTINUE.
+    ENDIF.
     CASE ls_res-status.
       WHEN gc_err.  lv_err  = lv_err + 1.
       WHEN gc_warn. lv_warn = lv_warn + 1.

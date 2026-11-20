@@ -18,6 +18,7 @@ cambian son iguales en los dos documentos.
 | PSE de System PKI | Incompleto (no se puede leer) | Fila informativa en **OK**, no se lee | "sap_system_pki_instance.pse: PSE de System PKI, gestionado por el kernel" |
 | **Licencias firmadas** (formato nuevo) | **No se revisaban**: solo se miraban las licencias antiguas | **Chequeo nuevo** con su tilde: cada licencia firmada, la clave del producto del sistema (`NetWeaver_SYB`) y el certificado de mantenimiento (`Maintenance_SYB`) | La licencia firmada temporal de `NetWeaver_SYB` venció: la v1 daba OK, la V2 da **Error** |
 | Licencias antiguas (formato clásico) | Chequeo "Licencia SAP" | El mismo chequeo, sin cambios de lógica; ahora se llama "Licencias antiguas" | Mismo resultado en las dos versiones |
+| Contadores del encabezado (Errores, Advertencias, Incompletos, OK) | Contaban también las filas de resumen, así que un mismo problema se contaba dos veces | Las filas de resumen no se cuentan; cada problema se cuenta una vez | Mismo resultado en BAS: v1 "Errores: 4 Advertencias: 7 OK: 29", V2 "Errores: 2 Advertencias: 5 OK: 27" |
 | RTCCTOOL | Ejecuta RTCCTOOL y lee los íconos de la lista | **No lo ejecuta**: lee el resultado de la última corrida que ST-A/PI guarda en `/SSF/BTAB`, avisa si esa corrida es vieja o si usa recomendaciones sin actualizar desde SAP | Sin popups de conexión a SAP ni corridas nuevas; "Nota 539977: Support Package de ST-PI pendiente" en **Error** |
 
 ### Licencias antiguas y licencias firmadas
@@ -676,7 +677,14 @@ cuenta para el estado general que se ve en pantalla (se recalcula después de en
 ## Estado general y salida ALV
 
 **Estado general (`calculate_global`):** cuenta las filas por estado. El estado general es el
-peor que aparezca, en este orden: ERROR > WARNING > INCOMPLETO > OK. En fondo
+peor que aparezca, en este orden: ERROR > WARNING > INCOMPLETO > OK.
+
+Las filas de resumen cuyo estado es el peor de sus filas de detalle no se cuentan, porque si
+no un mismo problema se contaría dos veces. Se agregan con `add_summary`, que las marca
+(`IS_SUM = 'X'`), y se siguen mostrando en el ALV y en el mail. Son las de ST22, SM12,
+RTCCTOOL, certificados, licencias antiguas y licencias firmadas. Las filas de resumen que
+señalan un problema propio, sin detalle debajo (por ejemplo "Ninguna licencia activa" o
+"Sin resultados de RTCCTOOL"), sí se cuentan. Los contadores cuentan filas, no chequeos. En fondo
 (`sy-batch = 'X'`) se escribe además un mensaje `S` con el estado y los contadores, que queda
 en el log del job.
 
