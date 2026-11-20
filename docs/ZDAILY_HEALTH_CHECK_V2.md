@@ -18,6 +18,7 @@ cambian son iguales en los dos documentos.
 | PSE de System PKI | Incompleto (no se puede leer) | Fila informativa en **OK**, no se lee | "sap_system_pki_instance.pse: PSE de System PKI, gestionado por el kernel" |
 | **Licencias firmadas** (formato nuevo) | **No se revisaban**: solo se miraban las licencias antiguas | **Chequeo nuevo** con su tilde: cada licencia firmada, la clave del producto del sistema (`NetWeaver_SYB`) y el certificado de mantenimiento (`Maintenance_SYB`) | La licencia firmada temporal de `NetWeaver_SYB` venció: la v1 daba OK, la V2 da **Error** |
 | Licencias antiguas (formato clásico) | Chequeo "Licencia SAP" | El mismo chequeo, sin cambios de lógica; ahora se llama "Licencias antiguas" | Mismo resultado en las dos versiones |
+| RTCCTOOL | Ejecuta RTCCTOOL y lee los íconos de la lista | **No lo ejecuta**: lee el resultado de la última corrida que ST-A/PI guarda en `/SSF/BTAB`, y avisa si esa corrida es vieja | Sin popups de conexión a SAP ni corridas nuevas; "Nota 539977: Support Package de ST-PI pendiente" en **Error** |
 
 ### Licencias antiguas y licencias firmadas
 
@@ -122,7 +123,7 @@ dentro de `TRY ... CATCH cx_root`.
 
 ### `submit_list`: leer la salida de otro report
 
-Usado por SICK y RTCCTOOL. Verifica en `TRDIR` que el programa exista y sea ejecutable
+Usado por SICK (en la V2, RTCCTOOL ya no lo usa). Verifica en `TRDIR` que el programa exista y sea ejecutable
 (`SUBC = '1'`), lo ejecuta con `SUBMIT (prog) EXPORTING LIST TO MEMORY AND RETURN`, recupera
 la lista con `LIST_FROM_MEMORY`, la pasa a texto con `LIST_TO_ASCI`, libera la memoria con
 `LIST_FREE_MEMORY`, reemplaza los marcos `|` por espacios y descarta las líneas vacías.
@@ -311,33 +312,42 @@ Resumen: `instancia: N procesos - DIA 6/5 UPD 1/1 ...` (Total/Libres).
 
 ## RTCCTOOL – herramientas de servicio
 
-**Equivalente manual:** transacción RTCCTOOL.
+**Equivalente manual:** report `/SSF/RTCCTOOL` (SA38).
 
-**Selección:** desmarcado por defecto (`X_RTCC`). Al ejecutar RTCCTOOL en diálogo puede aparecer el popup de conexión a SAP, así que conviene marcarlo solo cuando se quiere revisar.
+**Selección:** marcado por defecto (`X_RTCC`). Como ya no ejecuta RTCCTOOL, no abre popups.
 
-**Cómo lee:** ejecuta el report `RTCCTOOL` con `submit_list`. Al pasar la lista a texto,
-`LIST_TO_ASCI` deja los íconos como códigos `@xx@`, y por ellos clasifica cada línea:
+**Cómo lee:** no ejecuta RTCCTOOL. ST-A/PI guarda el estado evaluado de cada
+recomendación de la última corrida en `/SSF/BTAB`, con `RELID = 'TC'`, `PID = 'NXS'` y
+`OBJKEY = 'REC_IMPL_HIST'` (estructura `TS_REC_IMPL_HIST` de `/SSA/NXS`: nota, nombre interno,
+estado automático, estado manual, estado anterior, fecha y hora de la revisión). El chequeo lo
+lee con la rutina de ST-A/PI `BTAB_READ_TABLE` de `/SSF/SLIB`.
 
-| Código | Significado |
-|---|---|
-| `@0A@`, `@5C@`, `@F1@` | Rojo |
-| `@09@`, `@5D@` | Amarillo |
-| `@08@`, `@5B@` | Verde |
-| Línea con `MISSING` / `FALTA` (RTCCTOOL viejo, sin ST-A/PI) | Nota faltante (amarillo) |
+Todo es dinámico (`PERFORM ... IN PROGRAM ... IF FOUND`, `CREATE DATA ... TYPE ('/SSF/LOG')`),
+así que el programa compila igual en un sistema sin ST-A/PI.
 
-También guarda la primera línea que contenga `VERSION`, para mostrarla.
+El estado de cada recomendación es el manual (botón *Set->Green* de RTCCTOOL) si está
+informado; si no, el automático:
+
+| Estado guardado | En RTCCTOOL | En el reporte |
+|---|---|---|
+| `IMPLEMENTED` | Verde | OK (solo cuenta en el resumen) |
+| `IN_PROCESS`, `MANUAL_CONFIRM` u otro | Amarillo | **Advertencia** |
+| `MISSING`, `ERROR` | Rojo | **Error** |
+
+El título no se guarda en `REC_IMPL_HIST`: el reporte muestra "Nota N: título" para las
+recomendaciones conocidas (`rtcc_title`) y el nombre interno para el resto.
 
 **Cómo evalúa:**
 
 | Condición | Estado |
 |---|---|
-| Línea roja | **Error** "Recomendación pendiente (rojo)" |
-| Línea amarilla | **Advertencia** "Recomendación pendiente (amarillo)" |
-| Nota faltante | **Advertencia** "Pendiente (versión)" con la línea |
-| Más de 15 pendientes | Se muestran 15 y una fila de totales |
-| Solo verdes | **OK** "Sin recomendaciones pendientes" |
-| RTCCTOOL viejo sin notas faltantes | **OK** "Sin notas faltantes" |
-| No reconoce ningún semáforo | **Incompleto**, con los códigos vistos y las primeras 40 líneas de la salida, para ajustar el parser |
+| ST-A/PI no instalado (no existe `/SSF/SLIB`) | **Incompleto** "ST-A/PI no instalado" |
+| No hay datos (RTCCTOOL nunca corrió) | **Incompleto** "Sin resultados de RTCCTOOL" |
+| Resumen | "N en rojo, M en amarillo, K en verde" con la fecha de la última corrida; estado del peor |
+| Última corrida con más de `P_RTCDD` días | **Advertencia** "RTCCTOOL no se ejecuta hace N días" |
+| Cada recomendación en rojo o amarillo | Una fila con nota, título y estado (rojas primero) |
+
+**Parámetros:** `P_RTCDD` (días sin correr, por defecto 7).
 
 ---
 
@@ -689,7 +699,7 @@ guarda 255 y el mail lo muestra completo.
 | SM12 | `ENQUEUE_READ` | `T000` |
 | SM13 | – | `VBERROR`, `VBHDR` |
 | SM50 | `TH_WPINFO` (2da muestra) | – |
-| RTCCTOOL | `SUBMIT RTCCTOOL` + funciones de lista | `TRDIR` |
+| RTCCTOOL | `BTAB_READ_TABLE` (rutina de ST-A/PI en `/SSF/SLIB`) | `TRDIR`, `/SSF/BTAB` (TC/NXS/REC_IMPL_HIST) |
 | STRUST | `C_SAPGPARAM`, `EPS_GET_DIRECTORY_LISTING`, `SSFC_GET_OWNCERTIFICATE`, `SSFC_GET_CERTIFICATELIST`, `SSFC_PARSE_CERTIFICATE` | – |
 | ST03N | `SWNC_COLLECTOR_GET_AGGREGATES`, `DATE_COMPUTE_DAY` | – |
 | SMLG | `RZL_STRG_READALL_I`, `SWNC_COLLECTOR_GET_AGGREGATES` | `RZLLITAB` |
@@ -719,3 +729,4 @@ v1 y la V2 sobre los mismos casos:
 | Licencia firmada temporal de `NetWeaver_SYB` que venció el 12.11.2026 | No la ve: la licencia antigua permanente sigue OK | Resumen en **Error**; producto `NetWeaver_SYB` sin clave válida (`NO_VALID_LICENSE_KEY`); licencia temporal vencida (`VALIDITY` 4) en Error |
 | Sin certificado de mantenimiento instalado | – | Fila informativa OK "Certificado de mantenimiento (Maintenance_SYB): no instalado" |
 | Licencias antiguas | OK | OK (mismo resultado, con el nombre nuevo) |
+| RTCCTOOL (20.11.2026, ST-A/PI 01X_731, sin conexión a SAP) | Ejecuta RTCCTOOL (popup de conexión) | Lee la corrida de las 12:36: "1 en rojo, 2 en amarillo, 4 en verde"; Error "Nota 539977: Support Package de ST-PI pendiente"; Advertencias por las notas 12103 y 69455. Coincide con la pantalla de RTCCTOOL |

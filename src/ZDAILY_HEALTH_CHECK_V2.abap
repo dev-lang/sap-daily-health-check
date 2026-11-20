@@ -57,7 +57,7 @@ SELECTION-SCREEN COMMENT 4(9) k_sm50 FOR FIELD x_sm50.
 SELECTION-SCREEN COMMENT 14(45) d_sm50.
 SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN BEGIN OF LINE.
-PARAMETERS x_rtcc AS CHECKBOX DEFAULT space.
+PARAMETERS x_rtcc AS CHECKBOX DEFAULT 'X'.
 SELECTION-SCREEN COMMENT 4(9) k_rtcc FOR FIELD x_rtcc.
 SELECTION-SCREEN COMMENT 14(45) d_rtcc.
 SELECTION-SCREEN END OF LINE.
@@ -155,6 +155,15 @@ PARAMETERS p_cdias TYPE i DEFAULT 30.
 SELECTION-SCREEN COMMENT 48(24) u_cdias.
 SELECTION-SCREEN END OF LINE.
 SELECTION-SCREEN END OF BLOCK b_cert.
+
+SELECTION-SCREEN BEGIN OF BLOCK b_rtcc WITH FRAME TITLE t_rtcc.
+SELECTION-SCREEN BEGIN OF LINE.
+SELECTION-SCREEN COMMENT 1(31) c_rtcdd FOR FIELD p_rtcdd.
+SELECTION-SCREEN POSITION 33.
+PARAMETERS p_rtcdd TYPE i DEFAULT 7.
+SELECTION-SCREEN COMMENT 48(24) u_rtcdd.
+SELECTION-SCREEN END OF LINE.
+SELECTION-SCREEN END OF BLOCK b_rtcc.
 
 SELECTION-SCREEN BEGIN OF BLOCK b_perf WITH FRAME TITLE t_perf.
 SELECTION-SCREEN BEGIN OF LINE.
@@ -339,6 +348,10 @@ INITIALIZATION.
   t_cert  = 'Certificados (STRUST)'.
   c_cdias = 'Avisar vencimientos dentro de'.
   u_cdias = 'dias'.
+
+  t_rtcc  = 'Herramientas de servicio (RTCCTOOL)'.
+  c_rtcdd = 'Avisar si no corre hace mas de'.
+  u_rtcdd = 'dias'.
 
   t_perf  = 'Tiempos de respuesta (SMLG / ST03N)'.
   c_rtlim = 'Tiempo de respuesta maximo'.
@@ -1859,129 +1872,195 @@ ENDFORM.
 
 *======================================================================*
 * RTCCTOOL - recomendaciones pendientes
-*  Se interpreta la lista por los codigos de icono que deja LIST_TO_ASCI:
-*   rojo:     @0A@ (semaforo)  @5C@ (LED)  @F1@
-*   amarillo: @09@ (semaforo)  @5D@ (LED)
-*   verde:    @08@ (semaforo)  @5B@ (LED)
-*  Si no reconoce ninguno, vuelca la salida para poder ajustar el parser.
+*  No ejecuta RTCCTOOL: lee el resultado de la ultima corrida, que
+*  ST-A/PI guarda en /SSF/BTAB (RELID 'TC', PID 'NXS', OBJKEY
+*  'REC_IMPL_HIST'), con la rutina de ST-A/PI BTAB_READ_TABLE(/SSF/SLIB).
+*  Todo es dinamico para que el programa compile sin ST-A/PI.
+*  Estado: el manual (Set->Green) manda sobre el automatico.
+*   IMPLEMENTED = OK; MISSING / ERROR = error; el resto = advertencia.
 *======================================================================*
 FORM check_rtcctool.
-  DATA: lt_lines TYPE ty_t_text,
-        lv_line  TYPE ty_text,
-        lv_ok    TYPE c LENGTH 1,
-        lv_msg   TYPE c LENGTH 255,
-        lv_cat   TYPE c LENGTH 1,
-        lv_red   TYPE i,
-        lv_yel   TYPE i,
-        lv_green TYPE i,
-        lv_shown TYPE i,
-        lv_n     TYPE i,
-        lv_codes TYPE string,
-        lv_code  TYPE string,
-        lv_ver   TYPE string,
-        lv_sum   TYPE string.
+* Copia de TS_REC_IMPL_HIST (/SSA/NXS) con tipos elementales
+  TYPES: BEGIN OF lty_hist,
+           notepck         TYPE c LENGTH 10,
+           recname         TYPE c LENGTH 25,
+           prior_status    TYPE c LENGTH 20,
+           tool_status     TYPE c LENGTH 20,
+           manual_status   TYPE c LENGTH 20,
+           last_check_date TYPE d,
+           last_check_time TYPE t,
+           version_guid    TYPE c LENGTH 25,
+           version         TYPE n LENGTH 5,
+         END OF lty_hist.
+  DATA: lt_hist   TYPE STANDARD TABLE OF lty_hist,
+        ls_hist   TYPE lty_hist,
+        lr_log    TYPE REF TO data,
+        lr_relid  TYPE REF TO data,
+        lr_objkey TYPE REF TO data,
+        lv_prog   TYPE trdir-name,
+        lv_form   TYPE c LENGTH 30 VALUE 'BTAB_READ_TABLE',
+        lv_pid    TYPE c LENGTH 3 VALUE 'NXS',
+        lv_rc     TYPE sy-subrc,
+        lv_eff    TYPE c LENGTH 20,
+        lv_stat   TYPE c LENGTH 10,
+        lv_red    TYPE i,
+        lv_yel    TYPE i,
+        lv_green  TYPE i,
+        lv_total  TYPE i,
+        lv_maxd   TYPE d,
+        lv_maxt   TYPE t,
+        lv_days   TYPE i,
+        lv_note   TYPE c LENGTH 10,
+        lv_title  TYPE c LENGTH 60,
+        lv_dtxt   TYPE c LENGTH 10,
+        lv_pass   TYPE i,
+        lv_ttxt   TYPE c LENGTH 8,
+        lv_sum    TYPE string,
+        lv_det    TYPE string.
+  FIELD-SYMBOLS: <lt_log>    TYPE STANDARD TABLE,
+                 <lv_relid>  TYPE any,
+                 <lv_objkey> TYPE any.
 
-  PERFORM submit_list USING 'RTCCTOOL' CHANGING lt_lines lv_ok lv_msg.
-  IF lv_ok IS INITIAL.
-    PERFORM add_result USING 'RTCCTOOL' gc_inc
-      'No se pudo ejecutar RTCCTOOL' lv_msg.
+* ST-A/PI instalado?
+  SELECT SINGLE name FROM trdir INTO lv_prog WHERE name = '/SSF/SLIB'.
+  IF sy-subrc <> 0.
+    PERFORM add_result USING 'RTCCTOOL' gc_inc 'ST-A/PI no instalado'
+      'Sin /SSF/SLIB no se puede leer el resultado de RTCCTOOL (nota 69455)'.
     RETURN.
   ENDIF.
 
-  LOOP AT lt_lines INTO lv_line.
-    CLEAR lv_cat.
-    IF lv_line CS '@0A@' OR lv_line CS '@5C@' OR lv_line CS '@F1@'.
-      lv_cat = 'R'.
-    ELSEIF lv_line CS '@09@' OR lv_line CS '@5D@'.
-      lv_cat = 'Y'.
-    ELSEIF lv_line CS '@08@' OR lv_line CS '@5B@'.
-      lv_cat = 'G'.
-    ELSEIF lv_line CS 'MISSING' OR lv_line CS 'FALTA'.
-*     RTCCTOOL antiguo (sin ST-A/PI): informa notas faltantes en texto
-      lv_cat = 'M'.
-    ELSE.
-      IF lv_line CS 'VERSION' AND lv_ver IS INITIAL.
-        lv_ver = lv_line.
-        CONDENSE lv_ver.
-      ENDIF.
-*     Juntar otros codigos de icono que aparezcan (para diagnostico)
-      FIND REGEX '(@[0-9A-Z]{2}@)' IN lv_line SUBMATCHES lv_code.
-      IF sy-subrc = 0.
-        IF lv_codes NS lv_code.
-          lv_codes = |{ lv_codes } { lv_code }|.
-        ENDIF.
-      ENDIF.
-      CONTINUE.
-    ENDIF.
+  TRY.
+      CREATE DATA lr_log TYPE STANDARD TABLE OF ('/SSF/LOG').
+      CREATE DATA lr_relid TYPE ('/SSF/BTAB-RELID').
+      CREATE DATA lr_objkey TYPE ('/SSF/BTAB-OBJKEY').
+    CATCH cx_sy_create_data_error.
+      PERFORM add_result USING 'RTCCTOOL' gc_inc 'No se pudo leer RTCCTOOL'
+        'Faltan las estructuras /SSF/LOG o /SSF/BTAB de ST-A/PI'.
+      RETURN.
+  ENDTRY.
+  ASSIGN lr_log->* TO <lt_log>.
+  ASSIGN lr_relid->* TO <lv_relid>.
+  ASSIGN lr_objkey->* TO <lv_objkey>.
+  <lv_relid>  = 'TC'.
+  <lv_objkey> = 'REC_IMPL_HIST'.
 
-    CASE lv_cat.
-      WHEN 'G'.
-        lv_green = lv_green + 1.
-        CONTINUE.
-      WHEN 'R'.
-        lv_red = lv_red + 1.
-      WHEN 'Y' OR 'M'.
-        lv_yel = lv_yel + 1.
+  lv_rc = 8.
+  PERFORM (lv_form) IN PROGRAM (lv_prog)
+          TABLES   lt_hist <lt_log>
+          USING    <lv_relid> lv_pid <lv_objkey>
+          CHANGING lv_rc
+          IF FOUND.
+
+  IF lv_rc <> 0 OR lt_hist IS INITIAL.
+    PERFORM add_result USING 'RTCCTOOL' gc_inc 'Sin resultados de RTCCTOOL'
+      'No hay datos en /SSF/BTAB (TC/NXS/REC_IMPL_HIST): RTCCTOOL no se ejecuto en este sistema'.
+    RETURN.
+  ENDIF.
+
+* Primera pasada: totales y ultima corrida
+  LOOP AT lt_hist INTO ls_hist.
+    PERFORM rtcc_status USING ls_hist-tool_status ls_hist-manual_status
+                        CHANGING lv_eff lv_stat.
+    lv_total = lv_total + 1.
+    CASE lv_stat.
+      WHEN gc_ok.  lv_green = lv_green + 1.
+      WHEN gc_err. lv_red = lv_red + 1.
+      WHEN OTHERS. lv_yel = lv_yel + 1.
     ENDCASE.
-
-    lv_shown = lv_shown + 1.
-    IF lv_shown > 15.
-      CONTINUE.
+    IF ls_hist-last_check_date > lv_maxd OR
+       ( ls_hist-last_check_date = lv_maxd AND ls_hist-last_check_time > lv_maxt ).
+      lv_maxd = ls_hist-last_check_date.
+      lv_maxt = ls_hist-last_check_time.
     ENDIF.
-    REPLACE ALL OCCURRENCES OF REGEX '@[0-9A-Z]{2}@' IN lv_line WITH ''.
-    CONDENSE lv_line.
-    IF lv_cat = 'R'.
-      PERFORM add_result USING 'RTCCTOOL' gc_err 'Recomendacion pendiente (rojo)' lv_line.
-    ELSEIF lv_cat = 'M'.
-      IF lv_ver IS NOT INITIAL.
-        lv_sum = |Pendiente ({ lv_ver })|.
-      ELSE.
-        lv_sum = 'Pendiente'.
+  ENDLOOP.
+
+  WRITE lv_maxd TO lv_dtxt DD/MM/YYYY.
+  WRITE lv_maxt TO lv_ttxt USING EDIT MASK '__:__'.
+  IF lv_red > 0.
+    lv_stat = gc_err.
+  ELSEIF lv_yel > 0.
+    lv_stat = gc_warn.
+  ELSE.
+    lv_stat = gc_ok.
+  ENDIF.
+  IF lv_red = 0 AND lv_yel = 0.
+    lv_sum = |{ lv_total } recomendaciones en verde|.
+  ELSE.
+    lv_sum = |{ lv_red } en rojo, { lv_yel } en amarillo, { lv_green } en verde|.
+  ENDIF.
+  lv_det = |Ultima corrida de RTCCTOOL: { lv_dtxt } { lv_ttxt }|.
+  PERFORM add_result USING 'RTCCTOOL' lv_stat lv_sum lv_det.
+
+* Antiguedad de la ultima corrida
+  lv_days = sy-datum - lv_maxd.
+  IF p_rtcdd > 0 AND lv_days > p_rtcdd.
+    lv_sum = |RTCCTOOL no se ejecuta hace { lv_days } dias|.
+    lv_det = |Ultima corrida { lv_dtxt }. Programar /SSF/RTCCTOOL en fondo (o via SDCC) para tener datos actuales|.
+    PERFORM add_result USING 'RTCCTOOL' gc_warn lv_sum lv_det.
+  ENDIF.
+
+* Detalle de las pendientes (rojo primero)
+  SORT lt_hist BY notepck recname.
+  DO 2 TIMES.
+    lv_pass = sy-index.
+    LOOP AT lt_hist INTO ls_hist.
+      PERFORM rtcc_status USING ls_hist-tool_status ls_hist-manual_status
+                          CHANGING lv_eff lv_stat.
+      IF lv_stat = gc_ok.
+        CONTINUE.
       ENDIF.
-      PERFORM add_result USING 'RTCCTOOL' gc_warn lv_sum lv_line.
-    ELSE.
-      PERFORM add_result USING 'RTCCTOOL' gc_warn 'Recomendacion pendiente (amarillo)' lv_line.
-    ENDIF.
-  ENDLOOP.
+      IF ( lv_pass = 1 AND lv_stat <> gc_err ) OR
+         ( lv_pass = 2 AND lv_stat = gc_err ).
+        CONTINUE.
+      ENDIF.
+      lv_note = ls_hist-notepck.
+      SHIFT lv_note LEFT DELETING LEADING '0'.
+      PERFORM rtcc_title USING ls_hist-recname CHANGING lv_title.
+      IF lv_title IS INITIAL.
+        lv_title = ls_hist-recname.
+      ENDIF.
+      lv_sum = |Nota { lv_note }: { lv_title }|.
+      lv_det = |Estado { lv_eff } - { ls_hist-recname }|.
+      IF ls_hist-manual_status IS NOT INITIAL.
+        lv_det = |{ lv_det } (manual; automatico { ls_hist-tool_status })|.
+      ENDIF.
+      PERFORM add_result USING 'RTCCTOOL' lv_stat lv_sum lv_det.
+    ENDLOOP.
+  ENDDO.
+ENDFORM.
 
-  IF lv_shown > 15.
-    lv_sum = |{ lv_red } en rojo y { lv_yel } en amarillo (se muestran 15)|.
-    PERFORM add_result USING 'RTCCTOOL' gc_warn lv_sum 'Ver RTCCTOOL'.
+FORM rtcc_status USING    p_tool   TYPE any
+                          p_manual TYPE any
+                 CHANGING p_eff    TYPE any
+                          p_stat   TYPE any.
+  IF p_manual IS NOT INITIAL.
+    p_eff = p_manual.
+  ELSE.
+    p_eff = p_tool.
   ENDIF.
+  CASE p_eff.
+    WHEN 'IMPLEMENTED'.
+      p_stat = gc_ok.
+    WHEN 'MISSING' OR 'ERROR'.
+      p_stat = gc_err.
+    WHEN OTHERS.          "IN_PROCESS, MANUAL_CONFIRM, ...
+      p_stat = gc_warn.
+  ENDCASE.
+ENDFORM.
 
-  IF lv_red > 0 OR lv_yel > 0.
-    RETURN.
-  ENDIF.
-
-  IF lv_green = 0 AND lv_ver IS NOT INITIAL AND lv_codes IS INITIAL.
-*   RTCCTOOL antiguo sin notas faltantes
-    PERFORM add_result USING 'RTCCTOOL' gc_ok 'Sin notas faltantes' lv_ver.
-    RETURN.
-  ENDIF.
-
-  IF lv_green > 0.
-    lv_sum = |{ lv_green } chequeo(s) en verde|.
-    PERFORM add_result USING 'RTCCTOOL' gc_ok 'Sin recomendaciones pendientes' lv_sum.
-    RETURN.
-  ENDIF.
-
-* No se reconocio ningun semaforo: volcar la salida (max. 40 lineas)
-  IF lv_codes IS INITIAL.
-    lv_codes = 'ninguno (los iconos no llegan como @xx@)'.
-  ENDIF.
-  lv_sum = |No se reconocieron semaforos. Iconos vistos: { lv_codes }|.
-  PERFORM add_result USING 'RTCCTOOL' gc_inc lv_sum
-    'Salida de RTCCTOOL en las filas siguientes'.
-  lv_n = 0.
-  LOOP AT lt_lines INTO lv_line.
-    lv_n = lv_n + 1.
-    IF lv_n > 40.
-      EXIT.
-    ENDIF.
-    CONDENSE lv_line.
-    lv_sum = |Linea { lv_n }|.
-    PERFORM add_result USING 'RTCCTOOL' gc_inc lv_sum lv_line.
-  ENDLOOP.
+* Titulos de las recomendaciones conocidas (el titulo no se guarda en
+* REC_IMPL_HIST). Las que no estan aca se muestran por su nombre interno.
+FORM rtcc_title USING p_recname TYPE any CHANGING p_title TYPE any.
+  CLEAR p_title.
+  CASE p_recname.
+    WHEN 'ST-A/PIADDON_GREEN'.   p_title = 'Addon ST-A/PI'.
+    WHEN 'PROC_AFTER_ADDONIMPL'. p_title = 'Procedimiento posterior al addon ST-A/PI'.
+    WHEN 'DIGVERIF'.             p_title = 'Verificacion digital de contenido'.
+    WHEN 'OLC_ALLOW_W_RTC_GEN'.  p_title = 'Permitir colectores online'.
+    WHEN 'STPI_ADDON'.           p_title = 'Addon ST-PI'.
+    WHEN 'SUPPORTPACK_NEW'.      p_title = 'Support Package de ST-PI pendiente'.
+    WHEN 'CHECK_TCOLL_700'.      p_title = 'Colectores y TCOLL (RSCOLL00)'.
+  ENDCASE.
 ENDFORM.
 
 *======================================================================*
