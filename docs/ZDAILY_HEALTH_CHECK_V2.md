@@ -313,6 +313,8 @@ Resumen: `instancia: N procesos - DIA 6/5 UPD 1/1 ...` (Total/Libres).
 
 **Equivalente manual:** transacción RTCCTOOL.
 
+**Selección:** desmarcado por defecto (`X_RTCC`). Al ejecutar RTCCTOOL en diálogo puede aparecer el popup de conexión a SAP, así que conviene marcarlo solo cuando se quiere revisar.
+
 **Cómo lee:** ejecuta el report `RTCCTOOL` con `submit_list`. Al pasar la lista a texto,
 `LIST_TO_ASCI` deja los íconos como códigos `@xx@`, y por ellos clasifica cada línea:
 
