@@ -8,9 +8,11 @@ Reports ABAP para el control diario de Basis de un sistema SAP, con salida en un
 | [`ZDAILY_HEALTH_CHECK`](src/ZDAILY_HEALTH_CHECK.abap) | Health check general: SICK, ST22, SM12, SM13, SM50, RTCCTOOL, STRUST, ST03N, SMLG, SCOT, SLICENSE |
 | [`ZDAILY_HEALTH_CHECK_V2`](src/ZDAILY_HEALTH_CHECK_V2.abap) | Versión 2 del health check (en prueba): mismos chequeos + licencias firmadas, criterio único de certificados y System PKI informativo ([cambios](#zdaily_health_check-v2--cambios)) |
 | [`ZDAILY_JOB_CHECK`](src/ZDAILY_JOB_CHECK.abap) | Jobs de fondo (SM37), un chequeo por status |
+| [`ZDAILY_CERT_CHECK`](src/ZDAILY_CERT_CHECK.abap) | Solo certificados (STRUST): propios, de confianza y System PKI, con el criterio de la V2 |
 
 Cómo lee y evalúa cada dato (FMs, tablas, criterios): [ZDAILY_HEALTH_CHECK](docs/ZDAILY_HEALTH_CHECK.md) ·
-[ZDAILY_HEALTH_CHECK V2](docs/ZDAILY_HEALTH_CHECK_V2.md) · [ZDAILY_JOB_CHECK](docs/ZDAILY_JOB_CHECK.md).
+[ZDAILY_HEALTH_CHECK V2](docs/ZDAILY_HEALTH_CHECK_V2.md) · [ZDAILY_JOB_CHECK](docs/ZDAILY_JOB_CHECK.md) ·
+[ZDAILY_CERT_CHECK](docs/ZDAILY_CERT_CHECK.md).
 
 Probado en SAP ECC 6.0 EHP6 (SAP_BASIS 731, kernel 722, Sybase ASE). Las llamadas a FMs y tablas
 que pueden cambiar entre releases se hacen en forma dinámica: si algo no existe o tiene otra interfaz,
